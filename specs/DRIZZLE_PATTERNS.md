@@ -412,19 +412,9 @@ export const deleteTransaction = (id: string) =>
 
 ## Workflow
 
-### Development: Push
+### Always Use Migrations
 
-Use `db:push` for rapid iteration during development:
-
-```bash
-pnpm db:push
-```
-
-This applies schema changes directly without generating migration files. **Warning:** Can cause data loss if columns are removed.
-
-### Production: Migrations
-
-For production, generate and apply migrations:
+**Never use `pnpm db:push`**. Always generate and apply migrations to maintain migration history:
 
 ```bash
 # Generate migration from schema changes
