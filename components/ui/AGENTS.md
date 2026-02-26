@@ -83,6 +83,63 @@ See `member-select.tsx` for the canonical reusable component example.
 
 **Never** use a bare `<SelectValue placeholder="..." />` — it will show IDs.
 
+## CRITICAL: ChartConfig Must Have `label` on Every Key
+
+`ChartLegendContent` and `ChartTooltipContent` resolve display text from `ChartConfig` entries. If a config key is missing `label`, the legend/tooltip renders the color swatch but **no text** — just empty space next to a colored dot.
+
+**ALWAYS** include a human-readable `label` for every data series key:
+
+```tsx
+// CORRECT — legend and tooltip show "Planned Value", "Earned Value", etc.
+const chartConfig = {
+  plannedValue: { label: 'Planned Value', color: 'var(--chart-1)' },
+  earnedValue: { label: 'Earned Value', color: 'var(--chart-2)' },
+  actualCost: { label: 'Actual Cost', color: 'var(--chart-3)' }
+} satisfies ChartConfig;
+
+// WRONG — legend shows color dots with no text
+const chartConfig = {
+  plannedValue: { color: 'var(--chart-1)' },
+  earnedValue: { color: 'var(--chart-2)' },
+  actualCost: { color: 'var(--chart-3)' }
+} satisfies ChartConfig;
+```
+
+**Never** omit `label` from a `ChartConfig` entry — the legend and tooltip will be unreadable (colors only, no text).
+
+## CRITICAL: Chart Tooltip `formatter` Returns Value Only
+
+`ChartTooltipContent` always renders the color indicator and series label from `ChartConfig`. The `formatter` prop replaces **only the value portion** (right side). Do NOT embed labels or color indicators in formatter output — they're already rendered.
+
+```tsx
+// CORRECT — formatter returns formatted value only
+<ChartTooltipContent
+  formatter={value => {
+    const num = typeof value === 'number' ? value : Number(value);
+    return formatCurrency(num);
+  }}
+/>
+
+// CORRECT — JSX value with annotation
+<ChartTooltipContent
+  formatter={value => (
+    <span className="font-medium">
+      {value} <span className="text-muted-foreground text-xs">(extra info)</span>
+    </span>
+  )}
+/>
+
+// WRONG — duplicates the label that ChartTooltipContent already renders
+<ChartTooltipContent
+  formatter={(value, name) => {
+    const label = chartConfig[name]?.label ?? name;
+    return `${label}: ${value}`;
+  }}
+/>
+```
+
+**Never** include series labels in formatter output — they will appear twice in the tooltip.
+
 ## INSTALL SOURCES
 
 ### shadcn/ui
