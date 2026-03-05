@@ -176,27 +176,28 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-| Pattern                               | Correct Approach                                      |
-| ------------------------------------- | ----------------------------------------------------- |
-| API routes for CRUD operations        | Server actions (`lib/core/[domain]/*-action.ts`)      |
-| Streaming files through server        | S3 signed URLs (client uploads directly to S3)        |
-| `process.env.X` with throws           | `yield* Config.string('X')`                           |
-| `router.push()` for logout            | `window.location.href = '/'` (layout cache issue)     |
-| Barrel files (`index.ts` re-exports)  | Import from `live-layer.ts` directly                  |
-| `Effect.runPromise()` in pages        | `NextEffect.runPromise()` (handles redirects)         |
-| Layer `dependencies` option           | `Layer.provide()` externally (v4 compat)              |
-| Multiple services per directory       | One service per directory                             |
-| Multiple actions per file             | One action per file ending in `-action.ts`            |
-| `useState` for shareable UI state     | nuqs URL state (`app/*/search-params.ts`)             |
-| Import `parseAs*` from `nuqs`         | Import from `nuqs/server` in search-params.ts         |
-| Direct data fetch in page component   | Suspense + Content pattern (see PAGE_PATTERNS spec)   |
-| Nested Suspense with async components | Single Content component fetches all data             |
-| Missing `export const dynamic`        | Add `export const dynamic = 'force-dynamic'` for auth |
-| Sequential independent queries        | Use `Effect.all([...])` for parallel fetching         |
-| Raw SQL strings                       | Use `sql<T>\`...\`` typed templates                   |
-| Skipping input validation             | Use `S.decodeUnknown()` in all server actions         |
-| Global `Error` in Effect              | Use `Data.TaggedError` for domain errors              |
-| `await db.select()...`                | Use `yield* db.select()...` (Drizzle returns Effect)  |
+| Pattern                               | Correct Approach                                         |
+| ------------------------------------- | -------------------------------------------------------- |
+| API routes for CRUD operations        | Server actions (`lib/core/[domain]/*-action.ts`)         |
+| Streaming files through server        | S3 signed URLs (client uploads directly to S3)           |
+| `process.env.X` with throws           | `yield* Config.string('X')`                              |
+| `router.push()` for logout            | `window.location.href = '/'` (layout cache issue)        |
+| Barrel files (`index.ts` re-exports)  | Import from `live-layer.ts` directly                     |
+| `Effect.runPromise()` in pages        | `NextEffect.runPromise()` (handles redirects)            |
+| Layer `dependencies` option           | `Layer.provide()` externally (v4 compat)                 |
+| Multiple services per directory       | One service per directory                                |
+| Multiple actions per file             | One action per file ending in `-action.ts`               |
+| `useState` for shareable UI state     | nuqs URL state (`app/*/search-params.ts`)                |
+| Import `parseAs*` from `nuqs`         | Import from `nuqs/server` in search-params.ts            |
+| Direct data fetch in page component   | Suspense + Content pattern (see PAGE_PATTERNS spec)      |
+| Nested Suspense with async components | Single Content component fetches all data                |
+| Missing `export const dynamic`        | Add `export const dynamic = 'force-dynamic'` for auth    |
+| Sequential independent queries        | Use `Effect.all([...])` for parallel fetching            |
+| Raw SQL strings                       | Use `sql<T>\`...\`` typed templates                      |
+| Skipping input validation             | Use `S.decodeUnknown()` in all server actions            |
+| Global `Error` in Effect              | Use `Data.TaggedError` for domain errors                 |
+| `await db.select()...`                | Use `yield* db.select()...` (Drizzle returns Effect)     |
+| `emailOTP({ autoSignUp: true })`      | Use `autoSignUp: false` - require explicit user creation |
 
 ## UNIQUE STYLES
 
