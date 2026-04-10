@@ -11,9 +11,6 @@ Need to fetch data for initial page render?
 Need to mutate data (create, update, delete)?
   └─> Use Server Actions
 
-Need to handle file uploads/downloads?
-  └─> Use S3 signed URLs via Server Actions
-
 Need multiple independent queries?
   └─> Use Effect.all() in RSC or Server Actions
 
@@ -25,7 +22,17 @@ Need webhook endpoints for external services?
 
 Load data directly in Server Components using Effect-TS. This is the **default pattern** for all read operations.
 
-> **Important:** For pages that require authentication, see `specs/PAGE_PATTERNS.md` for the required Suspense + Content pattern with `export const dynamic = 'force-dynamic'`.
+> **Important:** For pages that require authentication, see `specs/PAGE_PATTERNS.md` for the required Suspense + Content pattern with `export const dynamic = 'force-dynamic'`. Heavy pages should split data-fetching across leaf server components — see `specs/COMPONENT_PATTERNS.md`.
+
+### Where reads can happen
+
+RSC reads can happen at any level of the server tree, not only in `page.tsx`:
+
+- **In the page's `Content` component** — default for light pages, see `PAGE_PATTERNS.md`
+- **In a leaf server component** — for heavy pages with independent sections, see `COMPONENT_PATTERNS.md`
+- **In a layout** — for shared data needed across multiple pages
+
+The decision is about page weight, not about where reads are "allowed".
 
 ### When to Use
 
@@ -36,14 +43,14 @@ Load data directly in Server Components using Effect-TS. This is the **default p
 ### Pattern (for authenticated pages)
 
 ```typescript
-// app/posts/page.tsx
+// app/(dashboard)/programs/page.tsx
 import { Suspense } from 'react'
 import { Effect, Match } from 'effect'
 import { cookies } from 'next/headers'
 import { AppLayer } from '@/lib/layers'
 import { NextEffect } from '@/lib/next-effect'
 import { getSession } from '@/lib/services/auth/get-session'
-import { getPosts } from '@/lib/core/post/get-posts'
+import { getPrograms } from '@/lib/core/program/get-programs'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,12 +60,12 @@ async function Content() {
   return await NextEffect.runPromise(
     Effect.gen(function* () {
       const session = yield* getSession()
-      const posts = yield* getPosts({ userId: session.user.id })
+      const programs = yield* getPrograms({ orgId: session.orgId })
 
       return (
         <div>
-          {posts.map(post => (
-            <PostCard key={post.id} post={post} />
+          {programs.map(program => (
+            <ProgramCard key={program.id} program={program} />
           ))}
         </div>
       )
@@ -77,7 +84,7 @@ async function Content() {
   )
 }
 
-export default async function PostsPage() {
+export default async function ProgramsPage() {
   return (
     <Suspense fallback={<p>Loading...</p>}>
       <Content />
@@ -89,22 +96,23 @@ export default async function PostsPage() {
 ### Domain Function
 
 ```typescript
-// lib/core/post/get-posts.ts
+// lib/core/program/get-programs.ts
 import { Effect } from 'effect';
-import { getSession } from '@/lib/services/auth/get-session';
 import { Db } from '@/lib/services/db/live-layer';
 import * as schema from '@/lib/services/db/schema';
 import { eq } from 'drizzle-orm';
 
-export const getPosts = () =>
+export const getPrograms = (params: { orgId: string }) =>
   Effect.gen(function* () {
-    const { user } = yield* getSession();
     const db = yield* Db;
 
-    const posts = yield* db.select().from(schema.post).where(eq(schema.post.userId, user.id));
+    const programs = yield* db
+      .select()
+      .from(schema.program)
+      .where(eq(schema.program.orgId, params.orgId));
 
-    return posts;
-  }).pipe(Effect.withSpan('Post.getPosts'));
+    return programs;
+  }).pipe(Effect.withSpan('Program.getPrograms'));
 ```
 
 ### Parallel Data Fetching with Effect.all
@@ -121,18 +129,19 @@ async function Content() {
       const session = yield* getSession();
 
       // Fetch all data in parallel
-      const [posts, categories, stats, recentActivity] = yield* Effect.all([
-        getPosts({ userId: session.user.id }),
-        getCategories(),
-        getUserStats(session.user.id),
-        getRecentActivity(session.user.id)
-      ]);
+      const [programs, members, recentActivity] = yield* Effect.all(
+        [
+          getPrograms({ orgId: session.orgId }),
+          getOrgMembers({ orgId: session.orgId }),
+          getRecentActivity({ orgId: session.orgId })
+        ],
+        { concurrency: 'unbounded' }
+      );
 
       return (
         <DashboardContent
-          posts={posts}
-          categories={categories}
-          stats={stats}
+          programs={programs}
+          members={members}
           recentActivity={recentActivity}
         />
       );
@@ -154,10 +163,43 @@ async function Content() {
 
 **Key points:**
 
-- `Effect.all([...])` runs all effects concurrently
+- **Always** pass `{ concurrency: 'unbounded' }` -- `Effect.all` defaults to sequential
 - Fails fast if any effect fails
 - Results are returned in array order matching input
 - Use for independent queries that don't depend on each other's results
+
+> **WARNING: Never pass raw Drizzle query builders directly to `Effect.all()`.**
+> Drizzle's `drizzle-orm/effect-postgres` query builders implement `[Symbol.iterator]`
+> and `[Effect.EffectTypeId]` via mixin, which makes `yield*` work in generators.
+> However, they lack the `_op` property that the Effect fiber runtime requires,
+> causing a `"Not a valid effect"` RuntimeException. Always wrap in `Effect.gen`:
+>
+> ```typescript
+> // WRONG - raw Drizzle query builders in Effect.all
+> yield* Effect.all([
+>   db.select().from(table1).where(...),
+>   db.select().from(table2).where(...)
+> ]);
+>
+> // CORRECT - wrap each in Effect.gen, always pass concurrency
+> yield* Effect.all(
+>   [
+>     Effect.gen(function* () {
+>       return yield* db.select().from(table1).where(...);
+>     }),
+>     Effect.gen(function* () {
+>       return yield* db.select().from(table2).where(...);
+>     })
+>   ],
+>   { concurrency: 'unbounded' }
+> );
+>
+> // ALSO CORRECT - use Effect-returning query functions
+> yield* Effect.all(
+>   [getPrograms(orgId), getOrgMembers(orgId)],
+>   { concurrency: 'unbounded' }
+> );
+> ```
 
 For complex queries with joins and aggregations, see [DRIZZLE_PATTERNS.md](./DRIZZLE_PATTERNS.md).
 
@@ -176,17 +218,17 @@ Use Server Actions for all data mutations. One action per file, always ending in
 
 ```
 lib/core/[domain]/
-├── get-posts.ts           # Read function (used in RSC)
-├── create-post-action.ts  # Server action
-├── update-post-action.ts  # Server action
-├── delete-post-action.ts  # Server action
-└── errors.ts              # Domain-specific errors
+├── get-programs.ts           # Read function (used in RSC)
+├── create-program-action.ts  # Server action
+├── update-program-action.ts  # Server action
+├── delete-program-action.ts  # Server action
+└── errors.ts                 # Domain-specific errors
 ```
 
 ### Server Action Pattern
 
 ```typescript
-// lib/core/post/delete-post-action.ts
+// lib/core/program/delete-program-action.ts
 'use server';
 
 import { Effect, Match } from 'effect';
@@ -194,10 +236,9 @@ import { revalidatePath } from 'next/cache';
 import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
-import { Post } from '@/lib/services/db/schema';
-import { deletePost } from './delete-post';
+import { deleteProgram } from './delete-program';
 
-export const deletePostAction = async (postId: Post['id']) => {
+export const deleteProgramAction = async (programId: string) => {
   return await NextEffect.runPromise(
     Effect.gen(function* () {
       const session = yield* getSession();
@@ -206,12 +247,12 @@ export const deletePostAction = async (postId: Post['id']) => {
         'user.email': session.user.email
       });
 
-      return yield* deletePost(postId);
+      return yield* deleteProgram(programId);
     }).pipe(
-      Effect.withSpan('action.post.delete', {
+      Effect.withSpan('action.program.delete', {
         attributes: {
-          'post.id': postId,
-          operation: 'post.delete'
+          'program.id': programId,
+          operation: 'program.delete'
         }
       }),
       Effect.provide(AppLayer),
@@ -228,7 +269,7 @@ export const deletePostAction = async (postId: Post['id']) => {
               })
             )
           ),
-        onSuccess: () => Effect.sync(() => revalidatePath('/posts'))
+        onSuccess: () => Effect.sync(() => revalidatePath('/programs'))
       })
     )
   );
@@ -238,26 +279,26 @@ export const deletePostAction = async (postId: Post['id']) => {
 ### Client Component Usage
 
 ```typescript
-// components/delete-post-dialog.tsx
+// components/delete-program-dialog.tsx
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useTransition } from 'react'
 import { toast } from 'sonner'
-import { deletePostAction } from '@/lib/core/post/delete-post-action'
+import { deleteProgramAction } from '@/lib/core/program/delete-program-action'
 
-export function DeletePostButton({ postId }: { postId: string }) {
+export function DeleteProgramButton({ programId }: { programId: string }) {
   const [isPending, startTransition] = useTransition()
 
   const handleDelete = () => {
     startTransition(async () => {
-      const result = await deletePostAction(postId)
+      const result = await deleteProgramAction(programId)
 
       if (result?._tag === 'Error') {
         toast.error(result.message)
         return
       }
 
-      toast.success('Post deleted')
+      toast.success('Program deleted')
     })
   }
 
@@ -281,7 +322,7 @@ Server actions should return one of:
 // Success with revalidation (most common for mutations)
 Effect.matchEffect({
   onFailure: error => /* ... */,
-  onSuccess: () => Effect.sync(() => revalidatePath('/posts'))
+  onSuccess: () => Effect.sync(() => revalidatePath('/programs'))
 })
 
 // Success with data return
@@ -291,257 +332,7 @@ Effect.matchEffect({
 })
 ```
 
-## Pattern 3: S3 Signed URLs for File Operations
-
-Use Server Actions to generate signed URLs, then upload/download directly from the client.
-
-### File Upload Flow
-
-```
-1. Client calls server action with file metadata
-2. Server action generates signed upload URL
-3. Client uploads directly to S3 using signed URL
-4. Client calls another server action to save the file reference
-```
-
-### Get Signed Upload URL Action
-
-```typescript
-// lib/core/document/get-upload-url-action.ts
-'use server';
-
-import { Effect, Match } from 'effect';
-import { AppLayer } from '@/lib/layers';
-import { NextEffect } from '@/lib/next-effect';
-import { getSession } from '@/lib/services/auth/get-session';
-import { S3 } from '@/lib/services/s3/live-layer';
-
-type UploadUrlInput = {
-  fileName: string;
-  folder: string;
-};
-
-export const getUploadUrlAction = async (input: UploadUrlInput) => {
-  return await NextEffect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* getSession();
-      const s3 = yield* S3;
-
-      // Generate unique key with user context
-      const key = `${input.folder}/${session.user.id}/${Date.now()}-${input.fileName}`;
-
-      const signedUrl = yield* s3.createSignedUrl(key, 300); // 5 min expiry
-      const publicUrl = s3.getUrlFromObjectKey(key);
-
-      return {
-        _tag: 'Success' as const,
-        signedUrl,
-        publicUrl,
-        key
-      };
-    }).pipe(
-      Effect.withSpan('action.document.getUploadUrl', {
-        attributes: {
-          'file.name': input.fileName,
-          'file.folder': input.folder
-        }
-      }),
-      Effect.provide(AppLayer),
-      Effect.scoped,
-      Effect.matchEffect({
-        onFailure: error =>
-          Match.value(error._tag).pipe(
-            Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
-            Match.orElse(() =>
-              Effect.succeed({
-                _tag: 'Error' as const,
-                message: 'Failed to generate upload URL'
-              })
-            )
-          ),
-        onSuccess: Effect.succeed
-      })
-    )
-  );
-};
-```
-
-### Save File Reference Action
-
-```typescript
-// lib/core/document/save-document-action.ts
-'use server';
-
-import { Effect, Match } from 'effect';
-import { revalidatePath } from 'next/cache';
-import { AppLayer } from '@/lib/layers';
-import { NextEffect } from '@/lib/next-effect';
-import { getSession } from '@/lib/services/auth/get-session';
-import { Db } from '@/lib/services/db/live-layer';
-import * as schema from '@/lib/services/db/schema';
-
-type SaveDocumentInput = {
-  name: string;
-  fileUrl: string;
-};
-
-export const saveDocumentAction = async (input: SaveDocumentInput) => {
-  return await NextEffect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* getSession();
-      const db = yield* Db;
-
-      yield* db.insert(schema.document).values({
-        name: input.name,
-        fileUrl: input.fileUrl,
-        uploadedBy: session.user.id
-      });
-    }).pipe(
-      Effect.withSpan('action.document.save', {
-        attributes: {
-          'document.name': input.name
-        }
-      }),
-      Effect.provide(AppLayer),
-      Effect.scoped,
-      Effect.matchEffect({
-        onFailure: error =>
-          Match.value(error._tag).pipe(
-            Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
-            Match.orElse(() =>
-              Effect.succeed({
-                _tag: 'Error' as const,
-                message: 'Failed to save document'
-              })
-            )
-          ),
-        onSuccess: () => Effect.sync(() => revalidatePath('/documents'))
-      })
-    )
-  );
-};
-```
-
-### Client Upload Component
-
-```typescript
-// components/file-upload.tsx
-'use client'
-
-import { useState } from 'react'
-import { toast } from 'sonner'
-import { getUploadUrlAction } from '@/lib/core/document/get-upload-url-action'
-import { saveDocumentAction } from '@/lib/core/document/save-document-action'
-
-export function FileUpload({ folder }: { folder: string }) {
-  const [isUploading, setIsUploading] = useState(false)
-
-  const handleUpload = async (file: File) => {
-    setIsUploading(true)
-
-    try {
-      // 1. Get signed URL from server
-      const urlResult = await getUploadUrlAction({
-        fileName: file.name,
-        folder
-      })
-
-      if (urlResult._tag === 'Error') {
-        toast.error(urlResult.message)
-        return
-      }
-
-      // 2. Upload directly to S3
-      const uploadResponse = await fetch(urlResult.signedUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type
-        }
-      })
-
-      if (!uploadResponse.ok) {
-        toast.error('Upload failed')
-        return
-      }
-
-      // 3. Save file reference to database
-      const saveResult = await saveDocumentAction({
-        name: file.name,
-        fileUrl: urlResult.publicUrl
-      })
-
-      if (saveResult?._tag === 'Error') {
-        toast.error(saveResult.message)
-        return
-      }
-
-      toast.success('File uploaded successfully')
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  return (
-    <input
-      type="file"
-      disabled={isUploading}
-      onChange={e => {
-        const file = e.target.files?.[0]
-        if (file) handleUpload(file)
-      }}
-    />
-  )
-}
-```
-
-### File Download with Signed URL
-
-For private files that need temporary access:
-
-```typescript
-// lib/core/document/get-download-url-action.ts
-'use server';
-
-import { Effect, Match } from 'effect';
-import { AppLayer } from '@/lib/layers';
-import { NextEffect } from '@/lib/next-effect';
-import { getSession } from '@/lib/services/auth/get-session';
-import { S3 } from '@/lib/services/s3/live-layer';
-
-export const getDownloadUrlAction = async (fileUrl: string) => {
-  return await NextEffect.runPromise(
-    Effect.gen(function* () {
-      yield* getSession(); // Ensure authenticated
-      const s3 = yield* S3;
-
-      const key = s3.getObjectKeyFromUrl(fileUrl);
-      const signedUrl = yield* s3.createSignedUrl(key, 60); // 1 min expiry for download
-
-      return { _tag: 'Success' as const, signedUrl };
-    }).pipe(
-      Effect.withSpan('action.document.getDownloadUrl'),
-      Effect.provide(AppLayer),
-      Effect.scoped,
-      Effect.matchEffect({
-        onFailure: error =>
-          Match.value(error._tag).pipe(
-            Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
-            Match.orElse(() =>
-              Effect.succeed({
-                _tag: 'Error' as const,
-                message: 'Failed to generate download URL'
-              })
-            )
-          ),
-        onSuccess: Effect.succeed
-      })
-    )
-  );
-};
-```
-
-## Pattern 4: API Routes (Exception Cases)
+## Pattern 3: API Routes (Exception Cases)
 
 Only use API routes when:
 
@@ -553,7 +344,6 @@ Only use API routes when:
 
 - Regular CRUD operations (use server actions)
 - Data loading for pages (use RSC)
-- File uploads/downloads (use S3 signed URLs)
 
 ### API Route Pattern (if needed)
 
@@ -592,8 +382,6 @@ export const POST = (request: Request) => effectHandler(request);
 | -------------------- | ----------------------- | -------------------------------- |
 | Page data loading    | RSC                     | `app/*/page.tsx`                 |
 | Create/Update/Delete | Server Action           | `lib/core/[domain]/*-action.ts`  |
-| File upload          | S3 signed URL + Action  | `lib/core/[domain]/*-action.ts`  |
-| File download        | S3 signed URL + Action  | `lib/core/[domain]/*-action.ts`  |
 | External webhooks    | API Route               | `app/api/webhooks/*/route.ts`    |
 | Auth callbacks       | API Route (better-auth) | `app/api/auth/[...all]/route.ts` |
 | Third-party API      | API Route               | `app/api/*/route.ts`             |
@@ -605,11 +393,11 @@ export const POST = (request: Request) => effectHandler(request);
 3. **Use `revalidatePath`** - Keep UI in sync after mutations
 4. **Always use `NextEffect.runPromise`** - Handles redirects correctly
 5. **Consistent error handling** - Return typed error objects for client handling
-6. **S3 for all files** - Never stream files through your server
-7. **Use `Effect.all()` for parallel queries** - Don't fetch sequentially when queries are independent
+6. **Use `Effect.all([], { concurrency: 'unbounded' })` for parallel queries** - Default is sequential
 
 ## See Also
 
 - [DRIZZLE_PATTERNS.md](./DRIZZLE_PATTERNS.md) - Database query patterns
 - [SERVER_ACTION_PATTERNS.md](./SERVER_ACTION_PATTERNS.md) - Complete action templates
 - [PAGE_PATTERNS.md](./PAGE_PATTERNS.md) - Suspense + Content pattern
+- [COMPONENT_PATTERNS.md](./COMPONENT_PATTERNS.md) - Leaf data-loading server components for heavy pages

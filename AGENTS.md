@@ -105,6 +105,7 @@ init/
 | Add domain function  | `lib/core/[domain]/*.ts`        | Pure Effect functions           |
 | Add new service      | `lib/services/[name]/`          | `lib/services/AGENTS.md`        |
 | Add dynamic page     | `app/*/page.tsx`                | `PAGE_PATTERNS.md`              |
+| Add leaf server component | `app/*/[slug]-leaf.tsx`    | `COMPONENT_PATTERNS.md`         |
 | Add API route        | `app/api/[route]/route.ts`      | Only for webhooks/external APIs |
 | Add UI component     | `components/ui/`                | `components/ui/AGENTS.md`       |
 | Add tests            | `lib/core/[domain]/*.test.ts`   | `EFFECT_TESTING.md`             |
@@ -190,9 +191,10 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 | `useState` for shareable UI state     | nuqs URL state (`app/*/search-params.ts`)                |
 | Import `parseAs*` from `nuqs`         | Import from `nuqs/server` in search-params.ts            |
 | Direct data fetch in page component   | Suspense + Content pattern (see PAGE_PATTERNS spec)      |
-| Nested Suspense with async components | Single Content component fetches all data                |
+| Monolithic Content on a heavy page    | Shell + leaf server components (see COMPONENT_PATTERNS)  |
 | Missing `export const dynamic`        | Add `export const dynamic = 'force-dynamic'` for auth    |
-| Sequential independent queries        | Use `Effect.all([...])` for parallel fetching            |
+| `Effect.all([...])` without concurrency | `Effect.all([...], { concurrency: 'unbounded' })` — default is sequential |
+| Raw Drizzle builders in `Effect.all`  | Wrap in `Effect.gen` or pass Effect-returning functions  |
 | Raw SQL strings                       | Use `sql<T>\`...\`` typed templates                      |
 | Skipping input validation             | Use `S.decodeUnknown()` in all server actions            |
 | Global `Error` in Effect              | Use `Data.TaggedError` for domain errors                 |
