@@ -267,7 +267,7 @@ export const deletePostAction = async (postId: Post['id']) => {
 
 - **No CI/CD configured** - deployment via Vercel auto-deploy
 - **React Compiler enabled** - automatic memoization (experimental)
-- **Drizzle beta** - using `1.0.0-beta.11`, may have breaking changes
+- **Drizzle beta** - tracking the `beta` tag, may have breaking changes
 - Effect v4 migration: services designed for easy `Effect.Service` → `ServiceMap.Service` transition
 - **Delete example files after setup** - Example schemas (post), sample routes, and template files are scaffolding only. Remove once real structure established
 - **This is a boilerplate repo** - See BOILERPLATE REPO section above. When starting a new project, ask user which modules to keep and rewrite AGENTS.md + README.md after cleanup
