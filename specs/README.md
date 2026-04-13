@@ -6,7 +6,7 @@ Architecture and pattern documentation for this Next.js + Effect-TS application.
 
 | Spec                                                     | Purpose                                                              |
 | -------------------------------------------------------- | -------------------------------------------------------------------- |
-| [DATA_ACCESS_PATTERNS.md](./DATA_ACCESS_PATTERNS.md)     | RSC for reads, server actions for mutations, API routes for webhooks |
+| [DATA_ACCESS_PATTERNS.md](./DATA_ACCESS_PATTERNS.md)     | RSC for reads, server actions for mutations, API routes for webhooks + high-freq mutations on heavy pages |
 | [SERVER_ACTION_PATTERNS.md](./SERVER_ACTION_PATTERNS.md) | Complete server action template with validation and error handling   |
 | [PAGE_PATTERNS.md](./PAGE_PATTERNS.md)                   | Suspense + Content pattern for dynamic/authenticated pages           |
 | [NUQS_URL_STATE.md](./NUQS_URL_STATE.md)                 | URL state for filters, search, pagination with nuqs                  |

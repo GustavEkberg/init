@@ -376,24 +376,194 @@ const effectHandler = HttpApp.toWebHandlerRuntime(runtime)(postHandler);
 export const POST = (request: Request) => effectHandler(request);
 ```
 
+## Pattern 4: Client-Side Mutations via API Routes (Heavy Pages)
+
+On heavy `force-dynamic` pages (many parallel queries), every `'use server'` action invocation causes Next.js to regenerate the entire RSC payload of the current page as part of the action response. On a page like the workstream detail view (~10 parallel queries), this costs ~3–8s per mutation — even with fire-and-forget, the server burns CPU regenerating a payload nobody reads.
+
+**Use API route handlers instead of server actions when all of these hold:**
+
+1. The page is `force-dynamic` with expensive data loading (≥5 parallel queries)
+2. Mutations are high-frequency (assign, status change, inline edit) — not rare one-offs
+3. The client already manages optimistic state (the RSC regen adds nothing)
+
+### Architecture
+
+Split each mutation into three pieces:
+
+| Piece | Location | Role |
+| ----- | -------- | ---- |
+| Pure Effect | `lib/core/[domain]/[op].ts` | Business logic, auth, validation. No `'use server'`, no `NextEffect.runPromise`. Reusable by route handler + tests. |
+| Route handler | `app/api/[domain]/[op]/route.ts` | Thin POST handler: decode body, run Effect, map errors to HTTP status, return `{ _tag: 'Success' | 'Error' }` JSON. |
+| Typed client | `lib/api-client/[domain].ts` | `'use client'` fetch wrapper using `@effect/platform` HttpClient. Returns same `{ _tag }` discriminated union. |
+
+### Pure Effect function
+
+```typescript
+// lib/core/task/assign-task.ts
+import { Effect, Schema as S } from 'effect'
+import { requireWorkstreamAccess } from '@/lib/core/auth/require-workstream-access'
+import { Db } from '@/lib/services/db/live-layer'
+import { ValidationError } from '@/lib/core/errors'
+
+export const AssignTaskInputSchema = S.Struct({
+  taskId: S.String.pipe(S.minLength(1)),
+  workstreamId: S.String.pipe(S.minLength(1)),
+  assignedTo: S.String.pipe(S.minLength(1))
+})
+
+export const assignTask = (rawInput: unknown) =>
+  Effect.gen(function* () {
+    const parsed = yield* S.decodeUnknown(AssignTaskInputSchema)(rawInput).pipe(
+      Effect.mapError(() => new ValidationError({ message: 'Invalid input', field: 'input' }))
+    )
+    const ctx = yield* requireWorkstreamAccess(parsed.workstreamId)
+    const db = yield* Db
+    // ... business logic
+    return { task: updatedTask, programId: ctx.program.id }
+  }).pipe(Effect.withSpan('task.assign'))
+```
+
+### Route handler
+
+```typescript
+// app/api/tasks/assign/route.ts
+import { Effect, Match } from 'effect'
+import { AppLayer } from '@/lib/layers'
+import { assignTask } from '@/lib/core/task/assign-task'
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => null)
+
+  const result = await Effect.runPromise(
+    assignTask(body).pipe(
+      Effect.provide(AppLayer),
+      Effect.scoped,
+      Effect.matchEffect({
+        onFailure: error =>
+          Match.value(error._tag).pipe(
+            Match.when('UnauthenticatedError', () =>
+              Effect.succeed(Response.json(
+                { _tag: 'Error', message: 'Authentication required' }, { status: 401 }
+              ))
+            ),
+            Match.when('UnauthorizedError', () =>
+              Effect.succeed(Response.json(
+                { _tag: 'Error', message: error.message }, { status: 403 }
+              ))
+            ),
+            Match.when('ValidationError', () =>
+              Effect.succeed(Response.json(
+                { _tag: 'Error', message: error.message }, { status: 400 }
+              ))
+            ),
+            Match.orElse(() =>
+              Effect.succeed(Response.json(
+                { _tag: 'Error', message: 'Failed to assign task' }, { status: 500 }
+              ))
+            )
+          ),
+        onSuccess: ({ task }) =>
+          Effect.sync(() => Response.json({ _tag: 'Success', task }))
+      })
+    )
+  )
+  return result
+}
+```
+
+### Typed client wrapper
+
+```typescript
+// lib/api-client/tasks.ts
+'use client'
+
+import { Schema as S } from 'effect'
+import { apiPost } from './internal-fetch'
+
+const TaskSuccessSchema = S.Struct({
+  _tag: S.Literal('Success'),
+  task: S.Unknown
+})
+
+export const assignTask = (input: {
+  readonly taskId: string
+  readonly workstreamId: string
+  readonly assignedTo: string
+}) => apiPost('/api/tasks/assign', input, TaskSuccessSchema)
+```
+
+`apiPost` uses `@effect/platform` HttpClient + FetchHttpClient. See `lib/api-client/internal-fetch.ts`.
+
+### Client component with optimistic state
+
+The parent client component manages `localTasks` state. Mutations update local state immediately, fire the API call, and revert on error:
+
+```typescript
+const handleAssigned = useCallback(
+  (taskId: string, userId: string, member: MemberOption) => {
+    // Optimistic: update immediately
+    setLocalTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, assignedTo: userId, assigneeName: member.userName }
+        : t
+    ))
+    // Fire-and-forget: no startTransition, no RSC regen
+    assignTask({ taskId, workstreamId, assignedTo: userId }).then(result => {
+      if (result._tag === 'Error') {
+        setLocalTasks(prev => prev.map(t =>
+          t.id === taskId ? tasks.find(orig => orig.id === taskId) ?? t : t
+        ))
+        onError(result.message)
+      }
+    })
+  },
+  [workstreamId, tasks, onError]
+)
+```
+
+### When NOT to use this pattern
+
+- Light pages (< 5 parallel queries) — server action overhead is negligible
+- Rare mutations (create program, delete workstream) — user won't notice 1–2s on a one-off
+- Mutations that need `revalidatePath`/`revalidateTag` to update other server-rendered sections immediately
+
+### File naming
+
+```
+lib/core/[domain]/
+├── assign-task.ts              # Pure Effect (used by route handler + tests)
+├── assign-task.test.ts         # Tests the pure Effect via runEffectAsAction helper
+├── get-programs.ts             # Read function (used in RSC)
+├── create-program-action.ts    # Server action (light pages, rare mutations)
+└── errors.ts                   # Domain-specific errors
+
+app/api/[domain]/[op]/
+└── route.ts                    # Thin POST handler
+
+lib/api-client/
+└── tasks.ts                    # Typed client wrappers ('use client')
+```
+
 ## Summary: Which Pattern to Use
 
-| Operation            | Pattern                 | Location                         |
-| -------------------- | ----------------------- | -------------------------------- |
-| Page data loading    | RSC                     | `app/*/page.tsx`                 |
-| Create/Update/Delete | Server Action           | `lib/core/[domain]/*-action.ts`  |
-| External webhooks    | API Route               | `app/api/webhooks/*/route.ts`    |
-| Auth callbacks       | API Route (better-auth) | `app/api/auth/[...all]/route.ts` |
-| Third-party API      | API Route               | `app/api/*/route.ts`             |
+| Operation            | Pattern                        | Location                         |
+| -------------------- | ------------------------------ | -------------------------------- |
+| Page data loading    | RSC                            | `app/*/page.tsx`                 |
+| Create/Update/Delete | Server Action                  | `lib/core/[domain]/*-action.ts`  |
+| High-freq mutations  | API Route + optimistic client  | `app/api/*/route.ts` + `lib/api-client/*.ts` |
+| External webhooks    | API Route                      | `app/api/webhooks/*/route.ts`    |
+| Auth callbacks       | API Route (better-auth)        | `app/api/auth/[...all]/route.ts` |
+| Third-party API      | API Route                      | `app/api/*/route.ts`             |
 
 ## Key Principles
 
-1. **Prefer server actions over API routes** - Less boilerplate, better type safety
+1. **Prefer server actions over API routes** — unless the page is heavy and mutations are frequent
 2. **One action per file** - Easier to find, test, and maintain
-3. **Use `revalidatePath`** - Keep UI in sync after mutations
-4. **Always use `NextEffect.runPromise`** - Handles redirects correctly
+3. **Use `revalidatePath`** - Keep UI in sync after mutations (server actions)
+4. **Always use `NextEffect.runPromise`** - Handles redirects correctly (RSC + server actions)
 5. **Consistent error handling** - Return typed error objects for client handling
 6. **Use `Effect.all([], { concurrency: 'unbounded' })` for parallel queries** - Default is sequential
+7. **Optimistic state for API route mutations** — client manages `localTasks` and merges server responses via callbacks
 
 ## See Also
 

@@ -244,6 +244,59 @@ Trade-off: this becomes N small queries on the first uncached load. Each query i
 
 If profiling shows the per-row pattern hurts cold loads, pre-warm by having `TaskListLeaf` issue a batched fetch that populates the per-tag cache, then let rows hit the warm cache. Track that as an optimization, not the default.
 
+## Client-Component Leaves with API Route Mutations
+
+Not all leaves are server components. On heavy pages with high-frequency mutations (e.g. workstream task list), the leaf is a **client component** that:
+
+1. Receives initial data from the shell as props (the shell's RSC fetch is the single source of truth on first load)
+2. Manages **optimistic local state** (`localTasks`, `localItems`) — fresher than the DB during in-flight mutations
+3. Mutates via **API route handlers** (not server actions) to avoid RSC payload regeneration
+4. Merges server responses back into local state via callbacks (`onSaved`, `onAssigned`)
+
+### When to use client-component leaves
+
+- The section has high-frequency inline mutations (assign, status change, inline edit)
+- The page is `force-dynamic` with expensive data loading
+- Server action RSC regen is the bottleneck (measured, not assumed)
+
+### Architecture
+
+```
+Shell (server component)
+  └─ <Suspense fallback={<TaskListSkeleton />}>
+       <TaskListLeaf workstreamId={id} programId={pid} />
+     </Suspense>
+
+TaskListLeaf (server component, thin)
+  └─ fetches tasks, members, etc. via Effect
+  └─ renders <TaskTable tasks={tasks} members={members} ... />
+
+TaskTable (client component, 'use client')
+  └─ owns localTasks state (initialized from props, syncs on prop change)
+  └─ mutations call lib/api-client/tasks.ts (fetch wrappers)
+  └─ optimistic update → fire API call → revert on error
+  └─ dialogs read from localTasks (freshest), not from a GET endpoint
+```
+
+### Props-driven dialogs
+
+Dialogs (EditTaskDialog, etc.) receive all data as props from the parent's local state — **no GET on open**. This eliminates races where a GET reads stale DB while an in-flight mutation hasn't propagated yet. The dialog's `onSaved` callback returns the validated server row, which the parent merges into `localTasks`.
+
+### Sync from server
+
+When server props change (navigation, `router.refresh()`), the client leaf re-syncs:
+
+```typescript
+const [localTasks, setLocalTasks] = useState<ReadonlyArray<TaskRow>>(tasks)
+const [prevTasks, setPrevTasks] = useState(tasks)
+if (tasks !== prevTasks) {
+  setPrevTasks(tasks)
+  setLocalTasks(tasks)
+}
+```
+
+See [DATA_ACCESS_PATTERNS.md](./DATA_ACCESS_PATTERNS.md) "Pattern 4: Client-Side Mutations via API Routes" for the full mutation architecture.
+
 ## Anti-Patterns
 
 | Anti-pattern                                                          | Correct                                                                       |
