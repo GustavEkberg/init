@@ -201,7 +201,7 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 | Skipping input validation             | Use `S.decodeUnknown()` in all server actions            |
 | Global `Error` in Effect              | Use `Data.TaggedError` for domain errors                 |
 | `await db.select()...`                | Use `yield* db.select()...` (Drizzle returns Effect)     |
-| `emailOTP({ autoSignUp: true })`      | Use `autoSignUp: false` - require explicit user creation |
+| `emailOTP()` without `disableSignUp` (defaults to `false`) | `disableSignUp: true` — block auto-registration on first OTP, require explicit user creation |
 
 ## UNIQUE STYLES
 
