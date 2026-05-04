@@ -53,15 +53,20 @@ function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
 }
 
+// Plain styled <div> rather than `MenuPrimitive.GroupLabel`. The Base UI
+// `GroupLabel` part requires a `MenuPrimitive.Group` ancestor and throws
+// "MenuGroupRootContext is missing" if used standalone — a runtime crash
+// that types/lint don't catch. For genuine semantic grouping wrap items in
+// `DropdownMenuGroup` and put a `<DropdownMenuLabel>` inside.
 function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: MenuPrimitive.GroupLabel.Props & {
+}: React.ComponentProps<'div'> & {
   inset?: boolean;
 }) {
   return (
-    <MenuPrimitive.GroupLabel
+    <div
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(

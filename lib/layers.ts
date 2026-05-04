@@ -1,3 +1,4 @@
+import 'server-only';
 import { Layer } from 'effect';
 import { Db } from './services/db/live-layer';
 import { Auth } from './services/auth/live-layer';

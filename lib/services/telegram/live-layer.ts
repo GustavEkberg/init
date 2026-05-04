@@ -1,3 +1,4 @@
+import 'server-only';
 import { Config, Context, Effect, Layer, Redacted } from 'effect';
 import { TelegramConfigError, TelegramSendError } from './errors';
 

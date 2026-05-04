@@ -1,3 +1,4 @@
+import 'server-only';
 import { Effect } from 'effect';
 import { cookies } from 'next/headers';
 import { Auth } from './live-layer';

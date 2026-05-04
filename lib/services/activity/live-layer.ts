@@ -1,3 +1,4 @@
+import 'server-only';
 import { Effect, FiberRef, Layer } from 'effect';
 import { Telegram } from '../telegram/live-layer';
 

@@ -48,7 +48,7 @@ export const getDownloadUrlAction = async (fileUrl: string) => {
       }),
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error).pipe(
             Match.tag('UnauthenticatedError', () => NextEffect.redirect('/login')),

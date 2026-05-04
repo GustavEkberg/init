@@ -19,7 +19,7 @@ async function Content() {
     }).pipe(
       Effect.provide(Layer.mergeAll(AppLayer)),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => Effect.succeed(<LoginForm />)),

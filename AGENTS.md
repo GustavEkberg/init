@@ -185,6 +185,8 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 | `router.push()` for logout            | `window.location.href = '/'` (layout cache issue)        |
 | Barrel files (`index.ts` re-exports)  | Import from `live-layer.ts` directly                     |
 | `Effect.runPromise()` in pages        | `NextEffect.runPromise()` (handles redirects)            |
+| `Effect.matchEffect` after `NextEffect.redirect` | `NextEffect.matchEffect` — plain matchEffect swallows `RedirectError` |
+| Server-only module imported by client component | Server modules (`lib/services/*/live-layer.ts`, `lib/layers.ts`, `lib/next-effect/`) carry `import 'server-only'`. Client components must import only from `*-types.ts` siblings or `'use server'` files |
 | Layer `dependencies` option           | `Layer.provide()` externally (v4 compat)                 |
 | Multiple services per directory       | One service per directory                                |
 | Multiple actions per file             | One action per file ending in `-action.ts`               |
@@ -206,6 +208,8 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 ### Next.js + Effect Integration
 
 Pages use `NextEffect.runPromise()` which catches `RedirectError` and calls `redirect()` outside the Effect context. This is required because Next.js redirects must be called outside try-catch.
+
+`NextEffect.matchEffect` is a drop-in replacement for `Effect.matchEffect` that auto-re-fails `RedirectError` so the redirect bubbles past the matcher to `runPromise`. Use it in every page and server action — plain `Effect.matchEffect` catches the redirect as a normal error and falls into the catch-all branch (or, if `onFailure` itself calls Next's `redirect()`, fails with `FiberFailure: NEXT_REDIRECT`).
 
 ### UI Components
 

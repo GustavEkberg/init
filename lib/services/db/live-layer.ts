@@ -1,3 +1,4 @@
+import 'server-only';
 import { PgClient } from '@effect/sql-pg';
 import { Config, Effect, Layer, Redacted } from 'effect';
 import { NodeContext } from '@effect/platform-node';

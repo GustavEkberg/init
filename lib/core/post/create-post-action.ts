@@ -43,7 +43,7 @@ export const createPostAction = async (input: CreatePostInput) => {
       }),
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),

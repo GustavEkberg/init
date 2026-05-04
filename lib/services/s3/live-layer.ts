@@ -1,3 +1,4 @@
+import 'server-only';
 import { S3 as S3Client, S3Service } from '@effect-aws/client-s3';
 import { Config, Context, Effect, Layer } from 'effect';
 import { S3ConfigError, S3NoBodyError } from './errors';

@@ -52,7 +52,7 @@ export const deletePostAction = async (postId: schema.Post['id']) => {
       }),
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),

@@ -1,9 +1,12 @@
-import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core';
-import { defineRelations } from 'drizzle-orm';
+import { pgTable, uuid, text, timestamp, boolean } from 'drizzle-orm/pg-core';
+import { defineRelations, sql } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 ////////////////////////////////////////////////////////////////////////
-// AUTH - Better-auth expects singular model names
+// AUTH - Better-auth expects singular model names.
+// Auth tables keep `text('id')` because better-auth manages ids itself.
+// `user.id` keeps the cuid2 default so server code can insert directly
+// into `user` (e.g. invite flows) without going through better-auth.
 ////////////////////////////////////////////////////////////////////////
 export const user = pgTable('user', {
   id: text('id')
@@ -32,12 +35,15 @@ export type User = typeof user.$inferSelect;
 export type InsertUser = typeof user.$inferInsert;
 
 ////////////////////////////////////////////////////////////////////////
-// EXAMPLE - Post table
+// EXAMPLE - Post table.
+// Domain tables use uuid7 per `specs/DRIZZLE_PATTERNS.md`. Requires
+// `CREATE EXTENSION IF NOT EXISTS pg_uuidv7;` in the database — Neon
+// ships the extension but it must still be installed per database.
 ////////////////////////////////////////////////////////////////////////
 export const post = pgTable('post', {
-  id: text('id')
+  id: uuid('id')
     .primaryKey()
-    .$defaultFn(() => createId()),
+    .default(sql`uuid_generate_v7()`),
   title: text('title').notNull(),
   content: text('content'),
   published: boolean('published').notNull().default(false),

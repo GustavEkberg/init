@@ -27,7 +27,7 @@ Both patterns share the same required elements.
 1. **`export const dynamic = 'force-dynamic'`** - Opt out of static generation
 2. **`await cookies()`** - Called at start of Content to ensure dynamic rendering
 3. **`<Suspense>` wrapper** - Provides loading state during server render
-4. **`Effect.matchEffect`** - Typed error handling with redirects
+4. **`NextEffect.matchEffect`** - Typed error handling that auto-bubbles `RedirectError` to `runPromise`
 
 ## Pattern: Basic Dynamic Page
 
@@ -60,7 +60,7 @@ async function Content() {
     }).pipe(
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -145,7 +145,7 @@ async function Content({ orgSlug, workstreamId }: Props) {
     }).pipe(
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -221,7 +221,7 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParams> }
     }).pipe(
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -277,7 +277,7 @@ async function Content() {
     }).pipe(
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -340,7 +340,7 @@ async function Content() {
     }).pipe(
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -540,10 +540,10 @@ return await NextEffect.runPromise(
 
 ## Error Handling Pattern
 
-Always use `Effect.matchEffect` with typed error tags:
+Always use `NextEffect.matchEffect` (not `Effect.matchEffect`) with typed error tags. The `NextEffect` variant detects `RedirectError` and re-fails so the redirect reaches `runPromise`; `Effect.matchEffect` would catch it as a regular failure and the page would render the fallback JSX instead of redirecting.
 
 ```typescript
-Effect.matchEffect({
+NextEffect.matchEffect({
   onFailure: error =>
     Match.value(error._tag).pipe(
       // Auth errors -> redirect to login
@@ -696,7 +696,7 @@ export function DashboardContent({
 - [ ] Add `export const dynamic = 'force-dynamic'` at top of file
 - [ ] Create `Content` async function with `await cookies()` as first line
 - [ ] Wrap Content in `<Suspense>` with appropriate fallback
-- [ ] Use `Effect.matchEffect` for error handling
+- [ ] Use `NextEffect.matchEffect` for error handling (auto-bubbles `RedirectError`)
 - [ ] Handle `UnauthenticatedError` with redirect to `/login`
 - [ ] Decide: single-Content (light page) or shell + leaves (heavy page) — see [COMPONENT_PATTERNS.md](./COMPONENT_PATTERNS.md)
 - [ ] Pass data to client components as props (or pass identifiers to leaf server components)
@@ -711,7 +711,7 @@ export function DashboardContent({
 | `await cookies()`                              | Signal dynamic rendering to Next.js            |
 | `<Suspense>` wrapper                           | Provide loading state                          |
 | `NextEffect.runPromise()`                      | Handle redirects outside Effect context        |
-| `Effect.matchEffect`                           | Typed error handling with clean redirects      |
+| `NextEffect.matchEffect`                       | Typed error handling that bubbles `RedirectError` |
 | Single Content (light) or shell + leaves (heavy) | Pick by page weight; leaves stream in parallel |
 | `Effect.all([], { concurrency: 'unbounded' })` | Parallel data fetching (default is sequential) |
 | Serializable props                             | Client components receive plain data           |

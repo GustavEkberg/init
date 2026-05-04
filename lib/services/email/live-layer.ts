@@ -1,3 +1,4 @@
+import 'server-only';
 import type {
   CreateEmailOptions,
   CreateEmailRequestOptions,

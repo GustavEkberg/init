@@ -156,7 +156,7 @@ export const createCategoryAction = async (input: CreateCategoryInput) => {
       // --------------------------------------------------------
       // 10. HANDLE RESULT
       // --------------------------------------------------------
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             // Redirect to login if not authenticated
@@ -235,8 +235,10 @@ const handleSubmit = async () => {
 
 ### Pattern: Match on Error Tags
 
+Use `NextEffect.matchEffect` (not `Effect.matchEffect`) — it auto-re-fails `RedirectError` so `runPromise` can call Next's `redirect()`. With plain `Effect.matchEffect`, an `UnauthenticatedError → NextEffect.redirect('/login')` chain produces a `RedirectError` failure that the same `matchEffect` then catches as a regular error, falling into the `Match.orElse` branch.
+
 ```typescript
-Effect.matchEffect({
+NextEffect.matchEffect({
   onFailure: error =>
     Match.value(error._tag).pipe(
       Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -518,7 +520,7 @@ export const deleteCategoryAction = async (input: DeleteCategoryInput) => {
       Effect.withSpan('action.category.delete'),
       Effect.provide(AppLayer),
       Effect.scoped,
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),

@@ -1,3 +1,4 @@
+import 'server-only';
 import { Effect, Context, Layer, Config } from 'effect';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
