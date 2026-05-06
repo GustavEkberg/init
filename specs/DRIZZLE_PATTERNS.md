@@ -481,6 +481,14 @@ export default defineConfig({
 });
 ```
 
+### Connection URL & SSL
+
+`pg-connection-string` (transitive dep of `pg`) emits a deprecation warning when `DATABASE_URL` contains `sslmode=prefer|require|verify-ca` — pg v9 will switch those to libpq semantics with weaker security guarantees.
+
+**This project's fix:** `lib/services/db/url.ts` exports `stripSslMode(url)` and `isLocalDbUrl(url)`. Both `db/live-layer.ts` and `auth/live-layer.ts` route the env var through `stripSslMode` and control SSL explicitly via the `ssl` flag (`true` for non-localhost, `false` for localhost). Paste Neon/Supabase URLs as-is — no need to edit query params.
+
+Any new connection path (seed scripts, one-off CLI, additional auth adapters) must reuse those helpers — do not duplicate the regex inline, and never silence the warning with `NODE_NO_WARNINGS`.
+
 ### Seed Script
 
 Seed scripts run outside Effect context - use postgres.js driver directly:
@@ -490,6 +498,7 @@ Seed scripts run outside Effect context - use postgres.js driver directly:
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
+import { isLocalDbUrl, stripSslMode } from './url';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Food & Dining', icon: '🍽️', isDefault: true },
@@ -497,7 +506,10 @@ const DEFAULT_CATEGORIES = [
 ];
 
 async function seed() {
-  const client = postgres(process.env.DATABASE_URL!);
+  // Reuse the shared helpers so every connection path strips sslmode the same
+  // way (avoids pg-connection-string v9 deprecation warning).
+  const url = stripSslMode(process.env.DATABASE_URL!);
+  const client = postgres(url, { ssl: !isLocalDbUrl(url) });
   const db = drizzle(client, { schema });
 
   for (const cat of DEFAULT_CATEGORIES) {

@@ -4,6 +4,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { nextCookies } from 'better-auth/next-js';
 import * as schema from '../db/schema';
+import { isLocalDbUrl, stripSslMode } from '../db/url';
 import { emailOTP } from 'better-auth/plugins';
 import { Email } from '../email/live-layer';
 import { AuthApiError, AuthConfigError } from './errors';
@@ -20,10 +21,9 @@ class AuthDb extends Context.Tag('@app/AuthDb')<
 const AuthDbLive = Layer.effect(
   AuthDb,
   Effect.gen(function* () {
-    const url = yield* Config.string('DATABASE_URL');
-    const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
+    const url = stripSslMode(yield* Config.string('DATABASE_URL'));
 
-    if (isLocal) {
+    if (isLocalDbUrl(url)) {
       const pool = new pg.Pool({ connectionString: url });
       return drizzleNode({ client: pool, schema });
     }
