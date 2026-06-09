@@ -10,6 +10,7 @@ Architecture and pattern documentation for this Next.js + Effect-TS application.
 | [SERVER_ACTION_PATTERNS.md](./SERVER_ACTION_PATTERNS.md) | Complete server action template with validation and error handling   |
 | [PAGE_PATTERNS.md](./PAGE_PATTERNS.md)                   | Suspense + Content pattern for dynamic/authenticated pages           |
 | [NUQS_URL_STATE.md](./NUQS_URL_STATE.md)                 | URL state for filters, search, pagination with nuqs                  |
+| [LOCAL_STORAGE_STATE.md](./LOCAL_STORAGE_STATE.md)       | Client-only local storage preferences without post-paint UI flicker  |
 
 ## Database
 

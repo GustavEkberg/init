@@ -722,3 +722,4 @@ export function DashboardContent({
 - [DATA_ACCESS_PATTERNS.md](./DATA_ACCESS_PATTERNS.md) - When to use RSC vs server actions
 - [SERVER_ACTION_PATTERNS.md](./SERVER_ACTION_PATTERNS.md) - Mutation patterns
 - [NUQS_URL_STATE.md](./NUQS_URL_STATE.md) - URL state with nuqs
+- [LOCAL_STORAGE_STATE.md](./LOCAL_STORAGE_STATE.md) - Client-only persisted UI preferences

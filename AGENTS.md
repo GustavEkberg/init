@@ -116,6 +116,7 @@ init/
 | Error types          | `lib/core/errors/index.ts`      | `Data.TaggedError` pattern      |
 | File uploads         | `lib/core/file/*-action.ts`     | `DATA_ACCESS_PATTERNS.md`       |
 | URL state (filters)  | `app/*/search-params.ts`        | `NUQS_URL_STATE.md`             |
+| Local storage UI state | Client hooks/components       | `LOCAL_STORAGE_STATE.md`        |
 
 ## CODE MAP
 
