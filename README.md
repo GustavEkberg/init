@@ -126,8 +126,6 @@ async function Content() {
       const posts = yield* getPosts()
       return <div>{/* render posts */}</div>
     }).pipe(
-      Effect.provide(Layer.mergeAll(AppLayer)),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

@@ -123,7 +123,8 @@ init/
 | Symbol                  | Type     | Location                              | Role                                      |
 | ----------------------- | -------- | ------------------------------------- | ----------------------------------------- |
 | `AppLayer`              | Layer    | `lib/layers.ts`                       | Merged service layer for Effect pipelines |
-| `NextEffect.runPromise` | Function | `lib/next-effect/index.ts`            | Handles redirects outside Effect context  |
+| `AppRuntime`            | Runtime  | `lib/layers.ts`                       | Module-level `ManagedRuntime` — services built once per process, memoized |
+| `NextEffect.runPromise` | Function | `lib/next-effect/index.ts`            | Runs on `AppRuntime`, handles redirects outside Effect context |
 | `Auth`                  | Service  | `lib/services/auth/live-layer.ts`     | Authentication (sign in/up/out, sessions) |
 | `Db`                    | Service  | `lib/services/db/live-layer.ts`       | Database (returns Drizzle client)         |
 | `Email`                 | Service  | `lib/services/email/live-layer.ts`    | Resend email sending                      |
@@ -186,6 +187,9 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 | `router.push()` for logout            | `window.location.href = '/'` (layout cache issue)        |
 | Barrel files (`index.ts` re-exports)  | Import from `live-layer.ts` directly                     |
 | `Effect.runPromise()` in pages        | `NextEffect.runPromise()` (handles redirects)            |
+| `Effect.provide(AppLayer)` / `Effect.scoped` in actions/pages | `NextEffect.runPromise` provides services via shared `AppRuntime` — per-call provide rebuilds every service |
+| `await AppRuntime.runtime()` at module top level | Resolve lazily on first request — eager resolution makes `next build` require env vars |
+| Unscoped resources in layers (`new pg.Pool()` in `Layer.effect`) | `Layer.scoped` + `Effect.acquireRelease` — runtime scope owns/releases the resource |
 | `Effect.matchEffect` after `NextEffect.redirect` | `NextEffect.matchEffect` — plain matchEffect swallows `RedirectError` |
 | Server-only module imported by client component | Server modules (`lib/services/*/live-layer.ts`, `lib/layers.ts`, `lib/next-effect/`) carry `import 'server-only'`. Client components must import only from `*-types.ts` siblings or `'use server'` files |
 | Layer `dependencies` option           | `Layer.provide()` externally (v4 compat)                 |
@@ -258,8 +262,6 @@ export const deletePostAction = async (postId: Post['id']) => {
       yield* deletePost(postId)
     }).pipe(
       Effect.withSpan('action.post.delete'),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error => /* handle errors */,
         onSuccess: () => Effect.sync(() => revalidatePath('/posts'))

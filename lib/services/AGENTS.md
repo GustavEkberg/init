@@ -196,7 +196,7 @@ const methodName = (arg: string) =>
 Services are composed in `lib/layers.ts`:
 
 ```typescript
-import { Layer } from 'effect';
+import { Layer, ManagedRuntime } from 'effect';
 import { Auth, AuthLive } from './services/auth/live-layer';
 import { Db, DbLive } from './services/db/live-layer';
 import { Email } from './services/email/live-layer';
@@ -204,9 +204,13 @@ import { Email } from './services/email/live-layer';
 // Combined app layer - use .Live which has all dependencies satisfied
 export const AppLayer = Layer.mergeAll(AuthLive, DbLive, TelegramLive, ActivityLive);
 
-// Re-export services for convenient imports
-export { Auth, Db, Email, Telegram, Activity };
+// Module-level runtime: layers built once per process and memoized.
+// `NextEffect.runPromise` runs on this runtime — actions/pages never
+// call `Effect.provide(AppLayer)` themselves.
+export const AppRuntime = ManagedRuntime.make(AppLayer);
 ```
+
+Scoped resources (db pools) are owned by the runtime's scope and released when the runtime is disposed — never per request. Service layers acquiring resources must use `Layer.scoped` + `Effect.acquireRelease`.
 
 ### Layer Composition Functions
 
@@ -250,7 +254,6 @@ export const getPosts = (userId: string) =>
 
 import { Effect, Match } from 'effect';
 import { revalidatePath } from 'next/cache';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { Db } from '@/lib/services/db/live-layer';
@@ -266,8 +269,6 @@ export const deletePostAction = async (postId: string) => {
       yield* db.delete(schema.post).where(eq(schema.post.id, postId));
     }).pipe(
       Effect.withSpan('action.post.delete'),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -289,7 +290,6 @@ export const deletePostAction = async (postId: string) => {
 // app/(dashboard)/posts/page.tsx
 import { Effect, Match } from 'effect';
 import { cookies } from 'next/headers';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { getPosts } from '@/lib/core/post/get-posts';
@@ -306,8 +306,6 @@ async function Content() {
 
       return <PostList posts={posts} />;
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

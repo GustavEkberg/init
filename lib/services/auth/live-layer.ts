@@ -18,13 +18,22 @@ class AuthDb extends Context.Tag('@app/AuthDb')<
   NeonHttpDatabase<typeof schema> | NodePgDatabase<typeof schema>
 >() {}
 
-const AuthDbLive = Layer.effect(
+const AuthDbLive = Layer.scoped(
   AuthDb,
   Effect.gen(function* () {
     const url = stripSslMode(yield* Config.string('DATABASE_URL'));
 
     if (isLocalDbUrl(url)) {
-      const pool = new pg.Pool({ connectionString: url });
+      // Pool is owned by the layer's scope: created once per runtime,
+      // drained via pool.end() when the runtime is disposed.
+      const pool = yield* Effect.acquireRelease(
+        Effect.sync(() => new pg.Pool({ connectionString: url })),
+        pool =>
+          Effect.tryPromise(() => pool.end()).pipe(
+            Effect.tapError(error => Effect.logError('Failed to close auth pg pool', { error })),
+            Effect.ignore
+          )
+      );
       return drizzleNode({ client: pool, schema });
     }
     return drizzleNeon({ connection: url, schema });

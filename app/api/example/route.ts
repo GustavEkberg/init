@@ -1,6 +1,6 @@
 import { HttpApp, HttpServerResponse } from '@effect/platform';
-import { Effect, Match, ManagedRuntime } from 'effect';
-import { AppLayer } from '@/lib/layers';
+import { Effect, Match } from 'effect';
+import { AppRuntime } from '@/lib/layers';
 import { getPosts } from '@/lib/core/post/get-posts';
 
 export const dynamic = 'force-dynamic';
@@ -24,8 +24,12 @@ const getHandler = Effect.gen(function* () {
   )
 );
 
-const managedRuntime = ManagedRuntime.make(AppLayer);
-const runtime = await managedRuntime.runtime();
-const effectHandler = HttpApp.toWebHandlerRuntime(runtime)(getHandler);
+// Resolve the runtime lazily on first request: ManagedRuntime memoizes the
+// layer build, and deferring keeps module import side-effect free so
+// `next build` page-data collection doesn't require env vars.
+let effectHandler: ((request: Request) => Promise<Response>) | undefined;
 
-export const GET = (request: Request) => effectHandler(request);
+export const GET = async (request: Request) => {
+  effectHandler ??= HttpApp.toWebHandlerRuntime(await AppRuntime.runtime())(getHandler);
+  return effectHandler(request);
+};

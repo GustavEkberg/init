@@ -1,24 +1,21 @@
 import { Effect } from 'effect';
 import { Auth } from '@/lib/services/auth/live-layer';
+import { AppRuntime } from '@/lib/layers';
 import { toNextJsHandler } from 'better-auth/next-js';
 
-async function getAuthHandler() {
-  return await Effect.runPromise(
-    Effect.gen(function* () {
-      const authService = yield* Auth;
-      return authService.auth;
-    }).pipe(Effect.provide(Auth.Live), Effect.scoped)
-  );
-}
+// Resolve the better-auth handler lazily on first request via the shared
+// runtime — the Auth service (and its db pool) is memoized by AppRuntime,
+// not rebuilt per request. Deferring keeps module import side-effect free
+// so `next build` page-data collection doesn't require env vars.
+let cachedHandler: ReturnType<typeof toNextJsHandler> | undefined;
 
-export async function GET(request: Request) {
-  const auth = await getAuthHandler();
-  const handler = toNextJsHandler(auth.handler);
-  return handler.GET(request);
-}
+const getHandler = async () => {
+  if (!cachedHandler) {
+    const auth = await AppRuntime.runPromise(Effect.map(Auth, authService => authService.auth));
+    cachedHandler = toNextJsHandler(auth.handler);
+  }
+  return cachedHandler;
+};
 
-export async function POST(request: Request) {
-  const auth = await getAuthHandler();
-  const handler = toNextJsHandler(auth.handler);
-  return handler.POST(request);
-}
+export const GET = async (request: Request) => (await getHandler()).GET(request);
+export const POST = async (request: Request) => (await getHandler()).POST(request);

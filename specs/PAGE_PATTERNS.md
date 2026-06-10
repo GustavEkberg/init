@@ -37,7 +37,6 @@ import { Suspense } from 'react'
 import { Effect, Match } from 'effect'
 import { cookies } from 'next/headers'
 import { NextEffect } from '@/lib/next-effect'
-import { AppLayer } from '@/lib/layers'
 import { getSession } from '@/lib/services/auth/get-session'
 import { getPosts } from '@/lib/core/post/get-posts'
 
@@ -58,8 +57,6 @@ async function Content() {
         </div>
       )
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -98,7 +95,6 @@ import { Suspense } from 'react'
 import { Effect, Match } from 'effect'
 import { cookies } from 'next/headers'
 import { NextEffect } from '@/lib/next-effect'
-import { AppLayer } from '@/lib/layers'
 import { requireWorkstreamAccess } from '@/lib/core/auth/require-workstream-access'
 import { WorkstreamHeaderLeaf } from './header-leaf'
 import { WorkstreamEVSectionLeaf } from './ev-section-leaf'
@@ -143,8 +139,6 @@ async function Content({ orgSlug, workstreamId }: Props) {
         </div>
       )
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -184,7 +178,6 @@ import { Effect, Match } from 'effect'
 import { cookies } from 'next/headers'
 import type { SearchParams } from 'nuqs/server'
 import { NextEffect } from '@/lib/next-effect'
-import { AppLayer } from '@/lib/layers'
 import { getSession } from '@/lib/services/auth/get-session'
 import { getPosts } from '@/lib/core/post/get-posts'
 import { loadSearchParams } from './search-params'
@@ -219,8 +212,6 @@ async function Content({ searchParams }: { searchParams: Promise<SearchParams> }
         </div>
       )
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -275,8 +266,6 @@ async function Content() {
         </div>
       )
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -338,8 +327,6 @@ async function Content() {
         </div>
       )
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

@@ -1,6 +1,7 @@
 import 'server-only';
-import { Data, Effect, Either } from 'effect';
+import { Data, Effect, Either, type Scope } from 'effect';
 import { redirect } from 'next/navigation';
+import { AppRuntime, type AppContext } from '@/lib/layers';
 
 // Tagged error for redirect intents. Exported so callers can `instanceof`-check
 // in custom error handlers without using `as` casts.
@@ -15,11 +16,19 @@ const redirectEffect = (path: string) => Effect.fail(new RedirectError({ path })
 
 /**
  * Custom Effect.runPromise that handles Next.js redirects outside the Effect context.
+ *
+ * Runs on the shared {@link AppRuntime}: app services are provided automatically
+ * (no per-call `Effect.provide(AppLayer)`) and a request-scoped `Scope` is
+ * supplied via `Effect.scoped`, so callers need neither.
  */
-const runPromise = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
-  const result = await Effect.runPromise(
-    Effect.catchAll(Effect.map(effect, Either.right), e =>
-      e instanceof RedirectError ? Effect.succeed(Either.left(e)) : Effect.fail(e)
+const runPromise = async <A, E>(
+  effect: Effect.Effect<A, E, AppContext | Scope.Scope>
+): Promise<A> => {
+  const result = await AppRuntime.runPromise(
+    Effect.scoped(
+      Effect.catchAll(Effect.map(effect, Either.right), e =>
+        e instanceof RedirectError ? Effect.succeed(Either.left(e)) : Effect.fail(e)
+      )
     )
   );
   if (Either.isLeft(result)) {

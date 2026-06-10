@@ -1,9 +1,8 @@
 import { Suspense } from 'react';
-import { Effect, Layer, Match } from 'effect';
+import { Effect, Match } from 'effect';
 import { cookies } from 'next/headers';
 import type { SearchParams } from 'nuqs/server';
 import { NextEffect } from '@/lib/next-effect';
-import { AppLayer } from '@/lib/layers';
 import { getPosts } from '@/lib/core/post/get-posts';
 import { loadSearchParams } from './search-params';
 import { PostSearch } from './post-search';
@@ -60,8 +59,6 @@ async function Content({
         </>
       );
     }).pipe(
-      Effect.provide(Layer.mergeAll(AppLayer)),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

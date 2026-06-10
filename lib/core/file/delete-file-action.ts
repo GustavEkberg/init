@@ -1,7 +1,6 @@
 'use server';
 
 import { Effect, Match } from 'effect';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { S3 } from '@/lib/services/s3/live-layer';
@@ -41,8 +40,6 @@ export const deleteFileAction = async (fileUrl: string) => {
           operation: 'file.delete'
         }
       }),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

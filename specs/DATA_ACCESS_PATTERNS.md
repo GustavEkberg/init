@@ -47,7 +47,6 @@ The decision is about page weight, not about where reads are "allowed".
 import { Suspense } from 'react'
 import { Effect, Match } from 'effect'
 import { cookies } from 'next/headers'
-import { AppLayer } from '@/lib/layers'
 import { NextEffect } from '@/lib/next-effect'
 import { getSession } from '@/lib/services/auth/get-session'
 import { getPrograms } from '@/lib/core/program/get-programs'
@@ -70,8 +69,6 @@ async function Content() {
         </div>
       )
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -146,8 +143,6 @@ async function Content() {
         />
       );
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -233,7 +228,6 @@ lib/core/[domain]/
 
 import { Effect, Match } from 'effect';
 import { revalidatePath } from 'next/cache';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { deleteProgram } from './delete-program';
@@ -255,8 +249,6 @@ export const deleteProgramAction = async (programId: string) => {
           operation: 'program.delete'
         }
       }),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -351,8 +343,7 @@ Only use API routes when:
 // app/api/webhooks/stripe/route.ts
 import { Effect, Match } from 'effect';
 import { HttpApp, HttpServerResponse } from '@effect/platform';
-import { ManagedRuntime } from 'effect';
-import { AppLayer } from '@/lib/layers';
+import { AppRuntime } from '@/lib/layers';
 import { handleStripeWebhook } from '@/lib/core/billing/handle-stripe-webhook';
 
 const postHandler = Effect.gen(function* () {
@@ -369,11 +360,15 @@ const postHandler = Effect.gen(function* () {
   )
 );
 
-const managedRuntime = ManagedRuntime.make(AppLayer);
-const runtime = await managedRuntime.runtime();
-const effectHandler = HttpApp.toWebHandlerRuntime(runtime)(postHandler);
+// Resolve the shared runtime lazily on first request — AppRuntime memoizes
+// the layer build, and deferring keeps module import side-effect free so
+// `next build` doesn't require env vars.
+let effectHandler: ((request: Request) => Promise<Response>) | undefined;
 
-export const POST = (request: Request) => effectHandler(request);
+export const POST = async (request: Request) => {
+  effectHandler ??= HttpApp.toWebHandlerRuntime(await AppRuntime.runtime())(postHandler);
+  return effectHandler(request);
+};
 ```
 
 ## Pattern 4: Client-Side Mutations via API Routes (Heavy Pages)
@@ -428,15 +423,15 @@ export const assignTask = (rawInput: unknown) =>
 ```typescript
 // app/api/tasks/assign/route.ts
 import { Effect, Match } from 'effect'
-import { AppLayer } from '@/lib/layers'
+import { AppRuntime } from '@/lib/layers'
 import { assignTask } from '@/lib/core/task/assign-task'
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
 
-  const result = await Effect.runPromise(
+  // AppRuntime provides all services (memoized layer, built once per process)
+  const result = await AppRuntime.runPromise(
     assignTask(body).pipe(
-      Effect.provide(AppLayer),
       Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>

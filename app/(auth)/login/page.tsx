@@ -1,8 +1,7 @@
 import { Suspense } from 'react';
-import { Effect, Layer, Match } from 'effect';
+import { Effect, Match } from 'effect';
 import { cookies } from 'next/headers';
 import { NextEffect } from '@/lib/next-effect';
-import { AppLayer } from '@/lib/layers';
 import { getSession } from '@/lib/services/auth/get-session';
 import { LoginForm } from './login-form';
 
@@ -17,8 +16,6 @@ async function Content() {
       // Redirect to home if already logged in
       return yield* NextEffect.redirect('/');
     }).pipe(
-      Effect.provide(Layer.mergeAll(AppLayer)),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

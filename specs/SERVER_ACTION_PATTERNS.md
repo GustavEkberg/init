@@ -69,7 +69,6 @@ export class ConstraintError extends Data.TaggedError('ConstraintError')<{
 
 import { Effect, Match, Schema as S } from 'effect';
 import { revalidatePath } from 'next/cache';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { Db } from '@/lib/services/db/live-layer';
@@ -150,8 +149,6 @@ export const createCategoryAction = async (input: CreateCategoryInput) => {
       // --------------------------------------------------------
       // 9. PROVIDE DEPENDENCIES
       // --------------------------------------------------------
-      Effect.provide(AppLayer),
-      Effect.scoped,
 
       // --------------------------------------------------------
       // 10. HANDLE RESULT
@@ -464,7 +461,6 @@ Effect.tapError(error =>
 import { Effect, Match, Schema as S } from 'effect';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { Db } from '@/lib/services/db/live-layer';
@@ -518,8 +514,6 @@ export const deleteCategoryAction = async (input: DeleteCategoryInput) => {
       return { id: parsed.id, name: existing.name };
     }).pipe(
       Effect.withSpan('action.category.delete'),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
@@ -555,7 +549,7 @@ export const deleteCategoryAction = async (input: DeleteCategoryInput) => {
 | `Effect.runPromise()`          | Misses redirect handling | `NextEffect.runPromise()`  |
 | Skipping validation            | Runtime errors, security | Always `S.decodeUnknown()` |
 | Generic error messages         | Poor UX                  | Domain-specific messages   |
-| Missing `Effect.scoped`        | Resource leaks           | Always include             |
+| `Effect.provide(AppLayer)` per action | Rebuilds services each call | `NextEffect.runPromise` provides via shared `AppRuntime` |
 | `try/catch` around action call | Loses structure          | Check `result._tag`        |
 | Throwing in generator          | Becomes defect           | `yield* new Error()`       |
 | Missing span                   | No tracing               | `Effect.withSpan()`        |
@@ -573,7 +567,7 @@ Before committing a server action, verify:
 - [ ] Calls `getSession()` if auth required
 - [ ] Uses `Effect.annotateCurrentSpan()` for context
 - [ ] Has `Effect.withSpan('action.entity.verb')`
-- [ ] Uses `Effect.provide(AppLayer)` and `Effect.scoped`
+- [ ] No `Effect.provide(AppLayer)` / `Effect.scoped` — `NextEffect.runPromise` runs on the shared `AppRuntime`
 - [ ] Returns `{ _tag: 'Success' | 'Error', ... }`
 - [ ] Handles all error types with `Match`
 - [ ] Redirects on `UnauthenticatedError`

@@ -1,7 +1,6 @@
 'use server';
 
 import { Effect, Match } from 'effect';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { S3 } from '@/lib/services/s3/live-layer';
@@ -64,8 +63,6 @@ export const getUploadUrlAction = async (input: GetUploadUrlInput) => {
           operation: 'file.getUploadUrl'
         }
       }),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(

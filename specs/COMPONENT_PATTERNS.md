@@ -43,7 +43,7 @@ A leaf is an **async server component** that:
 | ------------------------------------ | ---------------------------------- | --------------------------------------------------------- |
 | `async function`                     | the leaf                           | enables `await` / RSC streaming                           |
 | `NextEffect.runPromise(...)`         | inside the leaf                    | runs the Effect, handles redirects                        |
-| `Effect.provide(AppLayer)`           | end of pipeline                    | provides services                                         |
+| Shared `AppRuntime`                  | inside `NextEffect.runPromise`     | provides services (no per-leaf `Effect.provide`)          |
 | `Effect.matchEffect`                 | end of pipeline                    | per-leaf error UI                                         |
 | `<Suspense fallback={...}>` wrapper  | the **parent** (shell), not leaf   | streaming boundary; fallback shows until leaf resolves    |
 | Identifier-only props                | leaf signature                     | no pre-fetched data; the leaf owns its fetch              |
@@ -55,7 +55,6 @@ A leaf is an **async server component** that:
 // app/(dashboard)/[orgSlug]/program/[programId]/workstream/[workstreamId]/ev-section-leaf.tsx
 import { Effect, Match } from 'effect'
 import { NextEffect } from '@/lib/next-effect'
-import { AppLayer } from '@/lib/layers'
 import { getWorkstreamEVData } from '@/lib/core/cost/get-workstream-ev-data'
 import { WorkstreamEVSection } from './workstream-ev-section'
 import { EVErrorCard } from './ev-error-card'
@@ -71,8 +70,6 @@ export async function WorkstreamEVSectionLeaf({ workstreamId, programId }: Props
       const data = yield* getWorkstreamEVData(workstreamId, programId)
       return <WorkstreamEVSection {...data} />
     }).pipe(
-      Effect.provide(AppLayer),
-      Effect.scoped,
       Effect.matchEffect({
         onFailure: error =>
           Effect.succeed(<EVErrorCard message={error.message ?? 'Failed to load earned value'} />),
@@ -133,7 +130,6 @@ Wrap each leaf's data fetcher in a thin module that uses Next 16's `'use cache'`
 import { cacheTag } from 'next/cache'
 import { Effect } from 'effect'
 import { NextEffect } from '@/lib/next-effect'
-import { AppLayer } from '@/lib/layers'
 import { buildEVData } from './build-ev-data'
 
 export async function getWorkstreamEVData(workstreamId: string, programId: string) {
@@ -141,7 +137,7 @@ export async function getWorkstreamEVData(workstreamId: string, programId: strin
   cacheTag(`ws-ev:${workstreamId}`)
 
   return await NextEffect.runPromise(
-    buildEVData(workstreamId, programId).pipe(Effect.provide(AppLayer), Effect.scoped)
+    buildEVData(workstreamId, programId)
   )
 }
 ```
@@ -201,7 +197,7 @@ async function Content({ workstreamId }: Props) {
     Effect.gen(function* () {
       const ctx = yield* requireWorkstreamAccess(workstreamId) // ← only here
       // ... render leaves
-    }).pipe(Effect.provide(AppLayer), Effect.scoped, /* matchEffect */)
+    }).pipe(/* matchEffect */)
   )
 }
 ```
@@ -317,7 +313,7 @@ See [DATA_ACCESS_PATTERNS.md](./DATA_ACCESS_PATTERNS.md) "Pattern 4: Client-Side
 - [ ] File ends in `-leaf.tsx`, co-located with the page that uses it
 - [ ] `async function` taking only identifier props
 - [ ] No `await cookies()`, no `getSession()`, no auth check
-- [ ] Wraps Effect in `NextEffect.runPromise` with `Effect.provide(AppLayer)` + `Effect.scoped`
+- [ ] Wraps Effect in `NextEffect.runPromise` (services provided by the shared `AppRuntime` — no `Effect.provide`)
 - [ ] Has `Effect.matchEffect` with a local error fallback component
 - [ ] Data fetcher in `lib/core/[domain]/get-*.ts` uses `'use cache'` + `cacheTag(...)` if shareable across users
 - [ ] Caller wraps leaf in its own `<Suspense>` with a skeleton fallback

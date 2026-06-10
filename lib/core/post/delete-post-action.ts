@@ -2,7 +2,6 @@
 
 import { Effect, Match } from 'effect';
 import { revalidatePath } from 'next/cache';
-import { AppLayer } from '@/lib/layers';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { Db } from '@/lib/services/db/live-layer';
@@ -50,8 +49,6 @@ export const deletePostAction = async (postId: schema.Post['id']) => {
           operation: 'post.delete'
         }
       }),
-      Effect.provide(AppLayer),
-      Effect.scoped,
       NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
