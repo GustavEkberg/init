@@ -6,6 +6,7 @@ import type {
 } from 'resend';
 import { Resend as ResendClient } from 'resend';
 import { Config, Context, Effect, Layer, Redacted } from 'effect';
+import { retryPolicy } from '../retry';
 import { EmailConfigError, SendEmailError } from './errors';
 
 export { EmailConfigError, SendEmailError };
@@ -45,8 +46,21 @@ export class Email extends Effect.Service<Email>()('@app/Email', {
           'email.subject': payload.subject ?? 'none'
         });
 
-        const { data, error } = yield* Effect.promise(() =>
-          resendClient.emails.send(payload, options)
+        // tryPromise (not Effect.promise): a network rejection must surface as
+        // SendEmailError, not crash the fiber as a defect.
+        // Retry covers transport failures only (rejections/timeouts) — API-level
+        // errors returned in `error` below are permanent and never retried.
+        // Note: a retry after a lost response can duplicate the email; acceptable
+        // for OTP/notification mail.
+        const { data, error } = yield* Effect.tryPromise({
+          try: () => resendClient.emails.send(payload, options),
+          catch: cause => new SendEmailError({ message: 'Resend request failed', cause })
+        }).pipe(
+          Effect.timeoutFail({
+            duration: '10 seconds',
+            onTimeout: () => new SendEmailError({ message: 'Resend request timed out' })
+          }),
+          Effect.retry(retryPolicy)
         );
 
         if (error) {

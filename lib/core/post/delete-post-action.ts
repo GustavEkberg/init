@@ -1,17 +1,23 @@
 'use server';
 
-import { Effect, Match } from 'effect';
+import { Effect, Match, Schema as S } from 'effect';
 import { revalidatePath } from 'next/cache';
 import { NextEffect } from '@/lib/next-effect';
 import { getSession } from '@/lib/services/auth/get-session';
 import { Db } from '@/lib/services/db/live-layer';
-import { NotFoundError, UnauthorizedError } from '@/lib/core/errors';
+import { NotFoundError, UnauthorizedError, ValidationError } from '@/lib/core/errors';
 import * as schema from '@/lib/services/db/schema';
 import { eq } from 'drizzle-orm';
+
+const PostId = S.String.pipe(S.minLength(1), S.maxLength(64));
 
 export const deletePostAction = async (postId: schema.Post['id']) => {
   return await NextEffect.runPromise(
     Effect.gen(function* () {
+      yield* S.decodeUnknown(PostId)(postId).pipe(
+        Effect.mapError(() => new ValidationError({ message: 'Invalid post id', field: 'postId' }))
+      );
+
       const session = yield* getSession();
       const db = yield* Db;
 
@@ -60,6 +66,12 @@ export const deletePostAction = async (postId: schema.Post['id']) => {
               })
             ),
             Match.when('NotFoundError', () =>
+              Effect.succeed({
+                _tag: 'Error' as const,
+                message: error.message
+              })
+            ),
+            Match.when('ValidationError', () =>
               Effect.succeed({
                 _tag: 'Error' as const,
                 message: error.message

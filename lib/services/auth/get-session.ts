@@ -20,7 +20,12 @@ export type AppSession = {
 // Basic session guard - requires authentication
 export const getSession = () =>
   Effect.gen(function* () {
-    yield* Effect.promise(() => cookies()); // Mark as dynamic
+    // Mark route as dynamic. tryPromise (not Effect.promise): outside a request
+    // scope cookies() rejects — surface as typed failure, not a fiber defect.
+    yield* Effect.tryPromise({
+      try: () => cookies(),
+      catch: () => new UnauthenticatedError({ message: 'No request context available' })
+    });
 
     const authService = yield* Auth;
     const session = yield* authService.getSessionFromCookies();

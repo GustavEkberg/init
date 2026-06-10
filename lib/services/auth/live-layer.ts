@@ -176,8 +176,16 @@ export class Auth extends Effect.Service<Auth>()('@app/Auth', {
 
     const getSessionFromCookies = () =>
       Effect.gen(function* () {
-        const { cookies } = yield* Effect.tryPromise(() => import('next/headers'));
-        const cookieStore = yield* Effect.tryPromise(() => cookies());
+        // Two-arg tryPromise: map rejections to the tagged AuthApiError instead
+        // of leaking UnknownException into the error channel.
+        const { cookies } = yield* Effect.tryPromise({
+          try: () => import('next/headers'),
+          catch: error => new AuthApiError({ error })
+        });
+        const cookieStore = yield* Effect.tryPromise({
+          try: () => cookies(),
+          catch: error => new AuthApiError({ error })
+        });
 
         const headers = new Headers();
         cookieStore.getAll().forEach((cookie: { name: string; value: string }) => {

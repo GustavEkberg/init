@@ -1,5 +1,6 @@
 import 'server-only';
-import { Effect, FiberRef, Layer } from 'effect';
+import { Effect, FiberRef, Layer, Runtime } from 'effect';
+import { waitUntil } from '@vercel/functions';
 import { Telegram } from '../telegram/live-layer';
 
 export type Log = {
@@ -38,10 +39,11 @@ const format = (messages: string[], options?: FormatOptions) => {
 
 const formatDuration = (ms: number) => (ms > 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
 
-const getDuration = (logs: Log[]) =>
-  logs.length > 1
-    ? new Date(logs.at(-1)!.timestamp).getTime() - new Date(logs[0].timestamp).getTime()
-    : 0;
+const getDuration = (logs: Log[]) => {
+  const first = logs[0];
+  const last = logs.at(-1);
+  return first && last ? new Date(last.timestamp).getTime() - new Date(first.timestamp).getTime() : 0;
+};
 
 // Service definition
 // v4 migration: Change Effect.Service to ServiceMap.Service
@@ -82,14 +84,25 @@ export class Activity extends Effect.Service<Activity>()('@app/Activity', {
           executionTime: opts?.timestamps ? formatDuration(getDuration(logs)) : undefined
         });
 
-        yield* telegram.send(text);
         yield* FiberRef.set(LogsRef, []);
-      }).pipe(
-        Effect.withSpan('Activity.send'),
-        Effect.tapError(error => Effect.logError('Activity send failed', { error })),
-        Effect.catchAll(() => Effect.void),
-        Effect.forkDaemon
-      );
+
+        // Fire-and-forget via waitUntil, NOT Effect.forkDaemon: on serverless
+        // the instance is frozen once the response is sent, so a daemon fiber's
+        // in-flight Telegram call may never complete. waitUntil keeps the
+        // instance alive until the promise settles (no-ops to a floating
+        // promise outside Vercel). The captured runtime preserves spans/config.
+        const runtime = yield* Effect.runtime();
+        yield* Effect.sync(() =>
+          waitUntil(
+            Runtime.runPromise(runtime)(
+              telegram.send(text).pipe(
+                Effect.tapError(error => Effect.logError('Activity send failed', { error })),
+                Effect.ignore
+              )
+            )
+          )
+        );
+      }).pipe(Effect.withSpan('Activity.send'));
     };
 
     return { add, send } as const;

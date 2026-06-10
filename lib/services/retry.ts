@@ -18,7 +18,11 @@ const hasIsTransient = (error: unknown): error is { isTransient: true } =>
 export const isTransientError = (error: unknown): boolean =>
   hasIsTransient(error) || error instanceof SqlError.SqlError;
 
-// Usage example:
+// Used by: Email (Resend transport), Telegram (fetch).
+// Deliberately NOT applied to S3 (AWS SDK retries internally — stacking would
+// multiply attempts) or Db (pg pool handles connection retry/timeouts).
+//
+// Conditional usage example:
 // .pipe(
 //   Effect.retry({
 //     while: isTransientError,

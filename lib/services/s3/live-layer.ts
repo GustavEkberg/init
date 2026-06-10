@@ -1,9 +1,9 @@
 import 'server-only';
 import { S3 as S3Client, S3Service } from '@effect-aws/client-s3';
 import { Config, Context, Effect, Layer } from 'effect';
-import { S3ConfigError, S3NoBodyError } from './errors';
+import { S3BodyReadError, S3ConfigError, S3NoBodyError } from './errors';
 
-export { S3ConfigError, S3NoBodyError };
+export { S3BodyReadError, S3ConfigError, S3NoBodyError };
 
 // Configuration service (internal)
 class S3Config extends Context.Tag('@app/S3Config')<
@@ -104,7 +104,11 @@ export class S3 extends Effect.Service<S3>()('@app/S3', {
           });
         }
 
-        const bytes = yield* Effect.tryPromise(() => body.transformToByteArray());
+        const bytes = yield* Effect.tryPromise({
+          try: () => body.transformToByteArray(),
+          catch: cause =>
+            new S3BodyReadError({ message: `Failed to read S3 body for key: ${key}`, key, cause })
+        });
         // Buffer.from accepts Uint8Array directly
         const buffer = Buffer.from(bytes);
 

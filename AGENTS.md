@@ -190,6 +190,8 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 | `Effect.provide(AppLayer)` / `Effect.scoped` in actions/pages | `NextEffect.runPromise` provides services via shared `AppRuntime` — per-call provide rebuilds every service |
 | `await AppRuntime.runtime()` at module top level | Resolve lazily on first request — eager resolution makes `next build` require env vars |
 | Unscoped resources in layers (`new pg.Pool()` in `Layer.effect`) | `Layer.scoped` + `Effect.acquireRelease` — runtime scope owns/releases the resource |
+| `Effect.promise()` on rejectable promises | `Effect.tryPromise({ try, catch })` mapped to a tagged error — `Effect.promise` turns rejections into defects |
+| `Effect.forkDaemon` for fire-and-forget | `waitUntil(Runtime.runPromise(runtime)(effect))` — serverless freezes the instance after response; daemon fibers silently die (see Activity service) |
 | `Effect.matchEffect` after `NextEffect.redirect` | `NextEffect.matchEffect` — plain matchEffect swallows `RedirectError` |
 | Server-only module imported by client component | Server modules (`lib/services/*/live-layer.ts`, `lib/layers.ts`, `lib/next-effect/`) carry `import 'server-only'`. Client components must import only from `*-types.ts` siblings or `'use server'` files |
 | Layer `dependencies` option           | `Layer.provide()` externally (v4 compat)                 |

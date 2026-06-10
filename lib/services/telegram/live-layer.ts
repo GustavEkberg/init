@@ -1,5 +1,6 @@
 import 'server-only';
 import { Config, Context, Effect, Layer, Redacted } from 'effect';
+import { retryPolicy } from '../retry';
 import { TelegramConfigError, TelegramSendError } from './errors';
 
 const TELEGRAM_MESSAGE_MAX_LENGTH = 4096;
@@ -40,10 +41,12 @@ export class Telegram extends Effect.Service<Telegram>()('@app/Telegram', {
 
     const sendMessage = (message: string) =>
       Effect.tryPromise({
-        try: async () => {
+        // `signal` aborts the fetch on interruption (e.g. timeout below)
+        try: async signal => {
           const endpoint = `https://api.telegram.org/bot${Redacted.value(config.botToken)}/sendMessage`;
           const response = await fetch(endpoint, {
             method: 'POST',
+            signal,
             headers: {
               Accept: 'application/json',
               'Content-Type': 'application/json'
@@ -64,7 +67,16 @@ export class Telegram extends Effect.Service<Telegram>()('@app/Telegram', {
             message: error instanceof Error ? error.message : 'Unknown error',
             cause: error
           })
-      });
+      }).pipe(
+        // Telegram rate-limits (429); jittered exponential backoff (max 3 retries).
+        // Duplicate messages on a lost response are acceptable for notifications.
+        Effect.timeoutFail({
+          duration: '10 seconds',
+          onTimeout: () => new TelegramSendError({ message: 'Telegram request timed out' })
+        }),
+        Effect.retry(retryPolicy),
+        Effect.withSpan('Telegram.sendMessage')
+      );
 
     const send = (message: string) =>
       Effect.gen(function* () {
