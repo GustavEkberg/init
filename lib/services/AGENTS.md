@@ -269,7 +269,8 @@ export const deletePostAction = async (postId: string) => {
       yield* db.delete(schema.post).where(eq(schema.post.id, postId));
     }).pipe(
       Effect.withSpan('action.post.delete'),
-      Effect.matchEffect({
+      // NextEffect.matchEffect (NOT Effect.matchEffect) — auto-bubbles RedirectError
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -306,7 +307,8 @@ async function Content() {
 
       return <PostList posts={posts} />;
     }).pipe(
-      Effect.matchEffect({
+      // NextEffect.matchEffect (NOT Effect.matchEffect) — auto-bubbles RedirectError
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),

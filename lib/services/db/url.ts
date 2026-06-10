@@ -1,4 +1,5 @@
-import 'server-only';
+// NOTE: intentionally NOT 'server-only' — drizzle.config.ts (drizzle-kit CLI,
+// plain node) imports this too. Pure string helpers, no secrets.
 
 // pg-connection-string warns when sslmode is prefer/require/verify-ca because
 // pg v9 will switch those to libpq semantics with weaker security guarantees.

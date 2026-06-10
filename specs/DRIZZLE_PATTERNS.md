@@ -468,12 +468,19 @@ pnpm db:migrate
 
 ```typescript
 // drizzle.config.ts
+import { isLocalDbUrl, stripSslMode } from './lib/services/db/url';
+
+// drizzle-kit parses the URL via pg-connection-string — strip sslmode or every
+// CLI command (generate/migrate/push) emits the pg v9 deprecation warning.
+const url = stripSslMode(process.env.DATABASE_URL!);
+
 export default defineConfig({
   schema: './lib/services/db/schema.ts',
   out: './lib/services/db/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL!
+    url,
+    ssl: isLocalDbUrl(url) ? false : 'require'
   },
   migrations: {
     schema: 'drizzle' // Store migration metadata in 'drizzle' schema
@@ -485,7 +492,7 @@ export default defineConfig({
 
 `pg-connection-string` (transitive dep of `pg`) emits a deprecation warning when `DATABASE_URL` contains `sslmode=prefer|require|verify-ca` — pg v9 will switch those to libpq semantics with weaker security guarantees.
 
-**This project's fix:** `lib/services/db/url.ts` exports `stripSslMode(url)` and `isLocalDbUrl(url)`. Both `db/live-layer.ts` and `auth/live-layer.ts` route the env var through `stripSslMode` and control SSL explicitly via the `ssl` flag (`true` for non-localhost, `false` for localhost). Paste Neon/Supabase URLs as-is — no need to edit query params.
+**This project's fix:** `lib/services/db/url.ts` exports `stripSslMode(url)` and `isLocalDbUrl(url)`. `db/live-layer.ts`, `auth/live-layer.ts`, AND `drizzle.config.ts` all route the env var through `stripSslMode` and control SSL explicitly via the `ssl` flag (`true`/`'require'` for non-localhost, `false` for localhost). Paste Neon/Supabase URLs as-is — no need to edit query params. `url.ts` is deliberately NOT `'server-only'` so the drizzle-kit CLI config can import it.
 
 Any new connection path (seed scripts, one-off CLI, additional auth adapters) must reuse those helpers — do not duplicate the regex inline, and never silence the warning with `NODE_NO_WARNINGS`.
 

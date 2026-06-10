@@ -209,7 +209,7 @@ export class ServiceName extends Effect.Service<ServiceName>()('@app/ServiceName
 | Global `Error` in Effect              | Use `Data.TaggedError` for domain errors                 |
 | `await db.select()...`                | Use `yield* db.select()...` (Drizzle returns Effect)     |
 | `emailOTP()` without `disableSignUp` (defaults to `false`) | `disableSignUp: true` — block auto-registration on first OTP, require explicit user creation |
-| `sslmode=` in `DATABASE_URL` reaching `pg`/`postgres.js` | `pg-connection-string` warns on `prefer/require/verify-ca` (pg v9 semantics shift). Always route the URL through `stripSslMode` from `lib/services/db/url.ts` (used by db + auth layers) |
+| `sslmode=` in `DATABASE_URL` reaching `pg`/`postgres.js` | `pg-connection-string` warns on `prefer/require/verify-ca` (pg v9 semantics shift). Always route the URL through `stripSslMode` from `lib/services/db/url.ts` (used by db + auth layers AND `drizzle.config.ts` — drizzle-kit CLI parses the URL too) |
 
 ## UNIQUE STYLES
 
@@ -264,7 +264,7 @@ export const deletePostAction = async (postId: Post['id']) => {
       yield* deletePost(postId)
     }).pipe(
       Effect.withSpan('action.post.delete'),
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error => /* handle errors */,
         onSuccess: () => Effect.sync(() => revalidatePath('/posts'))
       })

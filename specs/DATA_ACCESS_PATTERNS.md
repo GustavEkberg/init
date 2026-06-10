@@ -69,7 +69,7 @@ async function Content() {
         </div>
       )
     }).pipe(
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -143,7 +143,7 @@ async function Content() {
         />
       );
     }).pipe(
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -249,7 +249,7 @@ export const deleteProgramAction = async (programId: string) => {
           operation: 'program.delete'
         }
       }),
-      Effect.matchEffect({
+      NextEffect.matchEffect({
         onFailure: error =>
           Match.value(error._tag).pipe(
             Match.when('UnauthenticatedError', () => NextEffect.redirect('/login')),
@@ -312,13 +312,14 @@ Server actions should return one of:
 
 ```typescript
 // Success with revalidation (most common for mutations)
-Effect.matchEffect({
+// Always NextEffect.matchEffect in actions/pages — Effect.matchEffect swallows RedirectError
+NextEffect.matchEffect({
   onFailure: error => /* ... */,
   onSuccess: () => Effect.sync(() => revalidatePath('/programs'))
 })
 
 // Success with data return
-Effect.matchEffect({
+NextEffect.matchEffect({
   onFailure: error => /* ... */,
   onSuccess: data => Effect.succeed({ _tag: 'Success' as const, data })
 })
